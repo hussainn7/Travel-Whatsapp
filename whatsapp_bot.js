@@ -3,7 +3,11 @@ const qrcode = require('qrcode-terminal');
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const axios = require('axios'); // Import axios for making HTTP requests
 const xml2js = require('xml2js'); // Import xml2js for XML parsing
+const EventEmitter = require('events');
 require('dotenv').config(); // Load environment variables
+
+// Create global event emitter for settings updates
+global.eventEmitter = new EventEmitter();
 
 class WhatsAppBot {
     constructor() {
@@ -11,7 +15,6 @@ class WhatsAppBot {
             authStrategy: new LocalAuth(),
             puppeteer: {
                 headless: true,
-                executablePath: '/usr/bin/google-chrome-stable',
                 args: [
                     '--no-sandbox',
                     '--disable-setuid-sandbox',
@@ -27,11 +30,40 @@ class WhatsAppBot {
         this.userData = new Map(); // Store user data
         this.countries = this.loadCountries(); // Load country list
         this.setupEventHandlers();
+        this.loadSettings();
 
-        // Hardcoded API credentials
-        this.OPENAI_API_KEY = 'OPNEAI_KEY'; 
-        this.TOURVISOR_LOGIN = 'admotionapp@gmail.com'; // Replace with your actual login
-        this.TOURVISOR_PASS = 'jqVZ4QLNLBN5'; // Replace with your actual password
+        // Listen for settings updates
+        global.eventEmitter.on('settingsUpdated', (settings) => {
+            console.log('Settings updated:', settings);
+            this.updateSettings(settings);
+        });
+    }
+
+    loadSettings() {
+        try {
+            const settings = JSON.parse(fs.readFileSync('../settings.json', 'utf8'));
+            this.updateSettings(settings);
+        } catch (error) {
+            console.error('Error loading settings:', error);
+            // Use default settings from the original code
+            this.OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+            this.TOURVISOR_LOGIN = process.env.TOURVISOR_LOGIN;
+            this.TOURVISOR_PASS = process.env.TOURVISOR_PASS;
+            this.SYSTEM_PROMPT = 'You are a helpful travel agent assistant. Provide friendly and informative responses about travel-related questions. If someone asks about booking a tour, remind them they can type "тур" to start the booking process.';
+        }
+    }
+
+    updateSettings(settings) {
+        this.OPENAI_API_KEY = settings.openaiApiKey;
+        this.TOURVISOR_LOGIN = settings.tourvisorLogin;
+        this.TOURVISOR_PASS = settings.tourvisorPass;
+        this.SYSTEM_PROMPT = settings.systemPrompt;
+        console.log('Settings updated:', {
+            openaiApiKey: this.OPENAI_API_KEY ? '***' : 'not set',
+            tourvisorLogin: this.TOURVISOR_LOGIN ? '***' : 'not set',
+            tourvisorPass: this.TOURVISOR_PASS ? '***' : 'not set',
+            systemPrompt: this.SYSTEM_PROMPT ? 'set' : 'not set'
+        });
     }
 
     loadCountries() {
@@ -312,12 +344,12 @@ class WhatsAppBot {
                     const description = hotel.hoteldescription[0];
                     const fullDescLink = hotel.fulldesclink[0];
                     const countryname = hotel.countryname[0];
-
+                    const hotelstars = hotel.hotelstars[0];
                     // Extracting fly dates from tours
                     const tours = hotel.tours[0].tour;
                     const flydate = tours.map(tour => tour.flydate[0]).join(', ');
 
-                    responseMessage += `\n🏨 Название: ${hotelName}\n💰 Цена: ${price} тг.\n Страна ${countryname}\n📝 Описание: ${description}\n🔗 Полное описание: http://manyhotels.ru/${fullDescLink}\n`;
+                    responseMessage += `\n🏨 Название: ${hotelName}\n💰 Цена: ${price} тг.\n Звезды: ${hotelstars} \nСтрана ${countryname}\n📝 Описание: ${description}\n🔗 Полное описание: http://manyhotels.ru/${fullDescLink}\n`;
                 });
                 await this.safeSendMessage(msg, responseMessage);
                 await this.safeSendMessage(msg, 'Поиск завершен. Вы можете задать мне вопрос о путешествиях или написать "тур" для нового поиска.');
@@ -463,7 +495,7 @@ class WhatsAppBot {
     }
 
     async getChatGPTResponse(userMessage) {
-        const apiKey = this.OPENAI_API_KEY; // Use the hardcoded OpenAI API key
+        const apiKey = this.OPENAI_API_KEY;
         const endpoint = 'https://api.openai.com/v1/chat/completions';
 
         try {
@@ -472,7 +504,7 @@ class WhatsAppBot {
                 messages: [
                     { 
                         role: 'system', 
-                        content: 'You are a helpful travel agent assistant. Provide friendly and informative responses about travel-related questions. If someone asks about booking a tour, remind them they can type "тур" to start the booking process.'
+                        content: this.SYSTEM_PROMPT // Use the dynamic system prompt
                     },
                     { 
                         role: 'user', 
