@@ -1,20 +1,18 @@
 {
-  "name": "whatsapp-bot",
+  "name": "whatsapp-bot-puppeteer",
   "version": "1.0.0",
-  "description": "WhatsApp Travel Bot",
+  "description": "WhatsApp bot with Puppeteer for browser automation",
   "main": "whatsapp_bot.js",
   "scripts": {
-    "start": "node whatsapp_bot.js"
+    "start": "node whatsapp_bot.js",
+    "test-puppeteer": "node puppeteer-test.js"
   },
   "dependencies": {
     "puppeteer": "^21.5.0",
-    "axios": "^1.6.2",
-    "dotenv": "^16.3.1",
-    "qrcode": "^1.5.3",
+    "whatsapp-web.js": "^1.23.0",
     "qrcode-terminal": "^0.12.0",
-    "whatsapp-web.js": "^1.22.1",
-    "xml2js": "^0.6.2"
-  },
-  "author": "",
-  "license": "MIT"
+    "axios": "^1.6.2",
+    "xml2js": "^0.6.2",
+    "dotenv": "^16.3.1"
+  }
 }
