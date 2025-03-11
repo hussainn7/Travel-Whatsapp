@@ -1,18 +1,17 @@
 {
-  "name": "whatsapp-bot-puppeteer",
+  "name": "whatsapp-bot",
   "version": "1.0.0",
-  "description": "WhatsApp bot with Puppeteer for browser automation",
+  "description": "Simple WhatsApp bot using whatsapp-web.js",
   "main": "whatsapp_bot.js",
   "scripts": {
-    "start": "node whatsapp_bot.js",
-    "test-puppeteer": "node puppeteer-test.js"
+    "start": "node whatsapp_bot.js"
   },
   "dependencies": {
-    "puppeteer": "^22.1.0",    
-    "whatsapp-web.js": "^1.23.0",
+    "axios": "^1.7.9",
+    "express-session": "^1.18.1",
+    "qrcode": "^1.5.4",
     "qrcode-terminal": "^0.12.0",
-    "axios": "^1.6.2",
-    "xml2js": "^0.6.2",
-    "dotenv": "^16.3.1"
+    "whatsapp-web.js": "^1.23.0",
+    "xml2js": "^0.6.2"
   }
 }
