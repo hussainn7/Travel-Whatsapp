@@ -1,14 +1,21 @@
 const fs = require('fs');
-const qrcode = require('qrcode-terminal');
+const qrcode = require('qrcode');
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const axios = require('axios'); // Import axios for making HTTP requests
 const xml2js = require('xml2js'); // Import xml2js for XML parsing
 const EventEmitter = require('events');
-const qr = require('qrcode'); // For PNG QR
+const express = require('express');
+const http = require('http');
+const WebSocket = require('ws');
 require('dotenv').config(); // Load environment variables
 
 // Create global event emitter for settings updates
 global.eventEmitter = new EventEmitter();
+
+const app = express();
+const server = http.createServer(app);
+const wss = new WebSocket.Server({ server });
+const port = 3000;
 
 class WhatsAppBot {
     constructor() {
@@ -42,55 +49,23 @@ class WhatsAppBot {
 
     loadSettings() {
         try {
-            // Try to load from the current directory first
-            let settings;
-            try {
-                settings = JSON.parse(fs.readFileSync('./settings.json', 'utf8'));
-                console.log('Loaded settings from ./settings.json');
-            } catch (e) {
-                // If not found, try one directory up
-                try {
-                    settings = JSON.parse(fs.readFileSync('../settings.json', 'utf8'));
-                    console.log('Loaded settings from ../settings.json');
-                } catch (err) {
-                    throw new Error('Could not find settings.json in either current or parent directory');
-                }
-            }
-            
-            if (!settings.openaiApiKey || !settings.tourvisorLogin || !settings.tourvisorPass) {
-                throw new Error('Missing required settings');
-            }
-            
+            const settings = JSON.parse(fs.readFileSync('../settings.json', 'utf8'));
             this.updateSettings(settings);
-            console.log('Settings loaded successfully');
         } catch (error) {
             console.error('Error loading settings:', error);
-            // Use environment variables as fallback
+            // Use default settings from the original code
             this.OPENAI_API_KEY = process.env.OPENAI_API_KEY;
             this.TOURVISOR_LOGIN = process.env.TOURVISOR_LOGIN;
             this.TOURVISOR_PASS = process.env.TOURVISOR_PASS;
             this.SYSTEM_PROMPT = 'You are a helpful travel agent assistant. Provide friendly and informative responses about travel-related questions. If someone asks about booking a tour, remind them they can type "тур" to start the booking process.';
-            
-            // Validate environment variables
-            if (!this.OPENAI_API_KEY || !this.TOURVISOR_LOGIN || !this.TOURVISOR_PASS) {
-                console.error('Critical error: Missing API credentials in both settings.json and environment variables');
-            } else {
-                console.log('Using environment variables for credentials');
-            }
         }
     }
 
     updateSettings(settings) {
-        this.OPENAI_API_KEY = settings.openaiApiKey;
-        this.TOURVISOR_LOGIN = settings.tourvisorLogin;
+        this.OPENAI_API_KEY = "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";
+        this.TOURVISOR_LOGIN = "admotionapp@gmail.com";
         this.TOURVISOR_PASS = settings.tourvisorPass;
         this.SYSTEM_PROMPT = settings.systemPrompt;
-        console.log('Settings updated:', {
-            openaiApiKey: this.OPENAI_API_KEY ? '***' : 'not set',
-            tourvisorLogin: this.TOURVISOR_LOGIN ? '***' : 'not set',
-            tourvisorPass: this.TOURVISOR_PASS ? '***' : 'not set',
-            systemPrompt: this.SYSTEM_PROMPT ? 'set' : 'not set'
-        });
     }
 
     loadCountries() {
@@ -172,29 +147,37 @@ class WhatsAppBot {
     }
 
     setupEventHandlers() {
-        this.client.on('qr', async (qrCode) => {
-            console.log('QR Code received. Scan to login.');
-            qrcode.generate(qrCode, { small: true }); // ASCII QR code
-            
-            // Generate a QR Code image
-            qr.toFile('whatsapp-qr.png', qrCode, (err) => {
-                if (err) throw err;
-                console.log('QR Code saved as whatsapp-qr.png');
+        // QR Code generation (only needed for first-time setup)
+        this.client.on('qr', (qr) => {
+            // Generate QR code and save it as an image
+            qrcode.toFile('./public/qr.png', qr, { errorCorrectionLevel: 'H' }, (err) => {
+                if (err) {
+                    console.error('Error generating QR code:', err);
+                } else {
+                    // Notify all connected WebSocket clients to refresh the QR code
+                    this.notifyClients('qr_updated');
+                }
             });
         });
 
+        // Ready event
         this.client.on('ready', () => {
-            console.log('Bot initialized successfully');
+            console.log('WhatsApp bot is ready!');
+            this.notifyClients('logged_in');
         });
 
+        // Message handling
         this.client.on('message', async (msg) => {
-            if (msg.from.includes('@c.us')) {
-                await this.handleMessage(msg);
-            }
+            if (msg.fromMe) return; // Ignore messages from the bot itself
+            await this.handleMessage(msg);
         });
+    }
 
-        this.client.on('disconnected', (reason) => {
-            console.log('Client was disconnected', reason);
+    notifyClients(message) {
+        wss.clients.forEach(client => {
+            if (client.readyState === WebSocket.OPEN) {
+                client.send(JSON.stringify({ type: message }));
+            }
         });
     }
 
@@ -618,6 +601,19 @@ class WhatsAppBot {
             .catch(err => console.error('Failed to initialize bot:', err));
     }
 }
+
+// Serve the QR code image
+app.get('/qr', (req, res) => {
+    res.sendFile(__dirname + '/public/qr.png');
+});
+
+// Serve the static files
+app.use(express.static('public'));
+
+// Start the server
+server.listen(port, () => {
+    console.log(`Server running at http://localhost:${port}`);
+});
 
 // Create and start the bot
 const bot = new WhatsAppBot();
