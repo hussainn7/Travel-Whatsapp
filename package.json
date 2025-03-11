@@ -5,8 +5,7 @@
   "main": "whatsapp.js",
   "scripts": {
     "start": "node whatsapp.js",
-    "test-puppeteer": "node puppeteer-test.js",
-    "postinstall": "npm install --omit=dev"
+    "test-puppeteer": "node puppeteer-test.js"
   },
   "dependencies": {
     "puppeteer": "^22.8.2",
