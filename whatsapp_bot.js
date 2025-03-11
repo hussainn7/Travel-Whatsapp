@@ -4,6 +4,7 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 const axios = require('axios'); // Import axios for making HTTP requests
 const xml2js = require('xml2js'); // Import xml2js for XML parsing
 const EventEmitter = require('events');
+const qr = require('qrcode'); // For PNG QR
 require('dotenv').config(); // Load environment variables
 
 // Create global event emitter for settings updates
@@ -145,21 +146,29 @@ class WhatsAppBot {
     }
 
     setupEventHandlers() {
-        // QR Code generation (only needed for first-time setup)
-        this.client.on('qr', (qr) => {
-            qrcode.generate(qr, { small: true });
-            console.log('QR Code generated. Please scan with WhatsApp!');
+        this.client.on('qr', async (qrCode) => {
+            console.log('QR Code received. Scan to login.');
+            qrcode.generate(qrCode, { small: true }); // ASCII QR code
+            
+            // Generate a QR Code image
+            qr.toFile('whatsapp-qr.png', qrCode, (err) => {
+                if (err) throw err;
+                console.log('QR Code saved as whatsapp-qr.png');
+            });
         });
 
-        // Ready event
         this.client.on('ready', () => {
-            console.log('WhatsApp bot is ready!');
+            console.log('Bot initialized successfully');
         });
 
-        // Message handling
         this.client.on('message', async (msg) => {
-            if (msg.fromMe) return; // Ignore messages from the bot itself
-            await this.handleMessage(msg);
+            if (msg.from.includes('@c.us')) {
+                await this.handleMessage(msg);
+            }
+        });
+
+        this.client.on('disconnected', (reason) => {
+            console.log('Client was disconnected', reason);
         });
     }
 
