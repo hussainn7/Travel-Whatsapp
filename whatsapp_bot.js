@@ -4,6 +4,7 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 const axios = require('axios'); // Import axios for making HTTP requests
 const xml2js = require('xml2js'); // Import xml2js for XML parsing
 const EventEmitter = require('events');
+const qr = require('qrcode'); // For PNG QR
 require('dotenv').config(); // Load environment variables
 
 // Create global event emitter for settings updates
@@ -41,15 +42,41 @@ class WhatsAppBot {
 
     loadSettings() {
         try {
-            const settings = JSON.parse(fs.readFileSync('../settings.json', 'utf8'));
+            // Try to load from the current directory first
+            let settings;
+            try {
+                settings = JSON.parse(fs.readFileSync('./settings.json', 'utf8'));
+                console.log('Loaded settings from ./settings.json');
+            } catch (e) {
+                // If not found, try one directory up
+                try {
+                    settings = JSON.parse(fs.readFileSync('../settings.json', 'utf8'));
+                    console.log('Loaded settings from ../settings.json');
+                } catch (err) {
+                    throw new Error('Could not find settings.json in either current or parent directory');
+                }
+            }
+            
+            if (!settings.openaiApiKey || !settings.tourvisorLogin || !settings.tourvisorPass) {
+                throw new Error('Missing required settings');
+            }
+            
             this.updateSettings(settings);
+            console.log('Settings loaded successfully');
         } catch (error) {
             console.error('Error loading settings:', error);
-            // Use default settings from the original code
+            // Use environment variables as fallback
             this.OPENAI_API_KEY = process.env.OPENAI_API_KEY;
             this.TOURVISOR_LOGIN = process.env.TOURVISOR_LOGIN;
             this.TOURVISOR_PASS = process.env.TOURVISOR_PASS;
             this.SYSTEM_PROMPT = 'You are a helpful travel agent assistant. Provide friendly and informative responses about travel-related questions. If someone asks about booking a tour, remind them they can type "тур" to start the booking process.';
+            
+            // Validate environment variables
+            if (!this.OPENAI_API_KEY || !this.TOURVISOR_LOGIN || !this.TOURVISOR_PASS) {
+                console.error('Critical error: Missing API credentials in both settings.json and environment variables');
+            } else {
+                console.log('Using environment variables for credentials');
+            }
         }
     }
 
@@ -145,21 +172,29 @@ class WhatsAppBot {
     }
 
     setupEventHandlers() {
-        // QR Code generation (only needed for first-time setup)
-        this.client.on('qr', (qr) => {
-            qrcode.generate(qr, { small: true });
-            console.log('QR Code generated. Please scan with WhatsApp!');
+        this.client.on('qr', async (qrCode) => {
+            console.log('QR Code received. Scan to login.');
+            qrcode.generate(qrCode, { small: true }); // ASCII QR code
+            
+            // Generate a QR Code image
+            qr.toFile('whatsapp-qr.png', qrCode, (err) => {
+                if (err) throw err;
+                console.log('QR Code saved as whatsapp-qr.png');
+            });
         });
 
-        // Ready event
         this.client.on('ready', () => {
-            console.log('WhatsApp bot is ready!');
+            console.log('Bot initialized successfully');
         });
 
-        // Message handling
         this.client.on('message', async (msg) => {
-            if (msg.fromMe) return; // Ignore messages from the bot itself
-            await this.handleMessage(msg);
+            if (msg.from.includes('@c.us')) {
+                await this.handleMessage(msg);
+            }
+        });
+
+        this.client.on('disconnected', (reason) => {
+            console.log('Client was disconnected', reason);
         });
     }
 
